@@ -8,7 +8,24 @@ import { GoogleGenAI, Type } from '@google/genai';
 import { Search, Loader2, AlertCircle, MessageSquare, Frown, Hash, ChevronRight, Target, Link as LinkIcon, Rss, Globe, Filter, Star, ExternalLink, Lightbulb, Wrench, Compass, PenTool, RefreshCw, Zap, Smile, BookOpen, ShieldCheck, Brain, TrendingUp, ThumbsUp, MessageCircle } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 
-const ai = new GoogleGenAI({ apiKey: import.meta.env.VITE_GEMINI_API_KEY || process.env.GEMINI_API_KEY });
+const getApiKey = () => {
+  // Try Vite's import.meta.env first
+  if (import.meta.env.VITE_GEMINI_API_KEY) return import.meta.env.VITE_GEMINI_API_KEY;
+  // Fallback to process.env (which we define in vite.config.ts)
+  try {
+    // @ts-ignore
+    if (typeof process !== 'undefined' && process.env && process.env.GEMINI_API_KEY) {
+      // @ts-ignore
+      return process.env.GEMINI_API_KEY;
+    }
+  } catch (e) {
+    // process might not be defined
+  }
+  return '';
+};
+
+const apiKey = getApiKey();
+console.log('Gemini API Key Status:', apiKey ? 'Present (starts with ' + apiKey.slice(0, 4) + '...)' : 'Missing');
 
 interface IntentData {
   coreTopic: string;
@@ -91,6 +108,11 @@ export default function App() {
   const handleAnalyze = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!topic.trim()) return;
+    
+    if (!apiKey) {
+      setError('Gemini API key is missing. Please set GEMINI_API_KEY or VITE_GEMINI_API_KEY in your environment.');
+      return;
+    }
 
     setLoading(true);
     setError('');
@@ -99,6 +121,7 @@ export default function App() {
     setTargetError('');
 
     try {
+      const ai = new GoogleGenAI({ apiKey });
       const response = await ai.models.generateContent({
         model: 'gemini-3-flash-preview',
         contents: `You are an intent analyzer.
@@ -161,7 +184,14 @@ ${topic}`,
     setLoadingTargets(true);
     setTargetError('');
 
+    if (!apiKey) {
+      setTargetError('Gemini API key is missing.');
+      setLoadingTargets(false);
+      return;
+    }
+
     try {
+      const ai = new GoogleGenAI({ apiKey });
       const expanded_keywords = [...result.problemPhrases, ...result.emotionalPhrases].join(', ');
       const response = await ai.models.generateContent({
         model: 'gemini-3-flash-preview',
@@ -221,7 +251,14 @@ ${expanded_keywords}`,
     setDiscussionError('');
     setDiscussionAnalysis(null);
 
+    if (!apiKey) {
+      setDiscussionError('Gemini API key is missing.');
+      setLoadingDiscussion(false);
+      return;
+    }
+
     try {
+      const ai = new GoogleGenAI({ apiKey });
       const response = await ai.models.generateContent({
         model: 'gemini-3-flash-preview',
         contents: `You are a discussion analyzer.
@@ -272,7 +309,14 @@ ${discussionInput}`,
     setGeneratedReply('');
     setVariations(null);
 
+    if (!apiKey) {
+      setReplyError('Gemini API key is missing.');
+      setLoadingReply(false);
+      return;
+    }
+
     try {
+      const ai = new GoogleGenAI({ apiKey });
       const response = await ai.models.generateContent({
         model: 'gemini-3-flash-preview',
         contents: `You are a helpful Reddit user.
@@ -326,7 +370,14 @@ One natural Reddit reply (5–8 lines max)`,
     setVariationsError('');
     setVariations(null);
 
+    if (!apiKey) {
+      setVariationsError('Gemini API key is missing.');
+      setLoadingVariations(false);
+      return;
+    }
+
     try {
+      const ai = new GoogleGenAI({ apiKey });
       const response = await ai.models.generateContent({
         model: 'gemini-3-flash-preview',
         contents: `You are a reply rewriter.
@@ -381,7 +432,14 @@ Output:
     setLearningError('');
     setLearningAnalysis(null);
 
+    if (!apiKey) {
+      setLearningError('Gemini API key is missing.');
+      setLoadingLearning(false);
+      return;
+    }
+
     try {
+      const ai = new GoogleGenAI({ apiKey });
       const response = await ai.models.generateContent({
         model: 'gemini-3-flash-preview',
         contents: `You are a learning system.
@@ -431,7 +489,14 @@ Output:
     setFilterError('');
     setFilteredPosts(null);
 
+    if (!apiKey) {
+      setFilterError('Gemini API key is missing.');
+      setLoadingFilter(false);
+      return;
+    }
+
     try {
+      const ai = new GoogleGenAI({ apiKey });
       const response = await ai.models.generateContent({
         model: 'gemini-3-flash-preview',
         contents: `You are a content filter.
@@ -487,6 +552,38 @@ Filter conditions:
     <div className="min-h-screen bg-zinc-50 text-zinc-900 font-sans selection:bg-indigo-100 selection:text-indigo-900">
       <div className="max-w-4xl mx-auto px-4 py-12 sm:px-6 lg:px-8">
         
+        {/* API Key Warning */}
+        {!apiKey && (
+          <div className="max-w-2xl mx-auto mb-8">
+            <div className="p-4 bg-amber-50 border border-amber-200 rounded-2xl flex items-start gap-3 text-amber-800">
+              <AlertCircle className="w-5 h-5 shrink-0 mt-0.5" />
+              <div>
+                <p className="font-semibold">Gemini API Key Missing</p>
+                <p className="text-sm opacity-90">The tool requires a Gemini API key to function. Please set <code>GEMINI_API_KEY</code> or <code>VITE_GEMINI_API_KEY</code> in your environment variables.</p>
+                <div className="mt-2 p-2 bg-amber-100/50 rounded text-xs font-mono">
+                  Debug Info: 
+                  <br />- import.meta.env.VITE_GEMINI_API_KEY: {import.meta.env.VITE_GEMINI_API_KEY ? 'Present (starts with ' + import.meta.env.VITE_GEMINI_API_KEY.slice(0, 4) + '...)' : 'Missing'}
+                  <br />- process.env.GEMINI_API_KEY: {typeof process !== 'undefined' && process.env?.GEMINI_API_KEY ? 'Present (starts with ' + process.env.GEMINI_API_KEY.slice(0, 4) + '...)' : 'Missing'}
+                </div>
+                <button 
+                  onClick={async () => {
+                    try {
+                      const ai = new GoogleGenAI({ apiKey: getApiKey() });
+                      const res = await ai.models.generateContent({ model: 'gemini-3-flash-preview', contents: 'hi' });
+                      alert('Connection successful! Response: ' + res.text);
+                    } catch (e: any) {
+                      alert('Connection failed: ' + e.message);
+                    }
+                  }}
+                  className="mt-3 px-3 py-1 bg-amber-200 text-amber-900 rounded text-xs font-bold hover:bg-amber-300 transition-colors"
+                >
+                  Test Connection
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
         {/* Header */}
         <div className="text-center mb-12">
           <motion.div
