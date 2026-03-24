@@ -1,0 +1,5 @@
+{
+  "name": "Search Intent Analyzer",
+  "description": "Expands a topic into real human search intent, focusing on problems and emotions.",
+  "requestFramePermissions": []
+}
