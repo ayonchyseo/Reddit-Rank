@@ -1,5 +1,5 @@
 {
-  "name": "Search Intent Analyzer",
-  "description": "Expands a topic into real human search intent, focusing on problems and emotions.",
+  "name": "Reddit Search Intent Analyzer",
+  "description": "Discover what people are really searching for. Enter a topic to uncover real human problems, emotional intent, and community discussions. Win AEO citation by analyzing the SERP.",
   "requestFramePermissions": []
 }

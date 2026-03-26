@@ -5,7 +5,7 @@
 
 import React, { useState } from 'react';
 import { GoogleGenAI, Type } from '@google/genai';
-import { Search, Loader2, AlertCircle, MessageSquare, Frown, Hash, ChevronRight, Target, Link as LinkIcon, Rss, Globe, Filter, Star, ExternalLink, Lightbulb, Wrench, Compass, PenTool, RefreshCw, Zap, Smile, BookOpen, ShieldCheck, Brain, TrendingUp, ThumbsUp, MessageCircle } from 'lucide-react';
+import { Search, Loader2, AlertCircle, MessageSquare, Frown, Hash, ChevronRight, Target, Link as LinkIcon, Rss, Globe, Filter, Star, ExternalLink, Lightbulb, Wrench, Compass, PenTool, RefreshCw, Zap, Smile, BookOpen, ShieldCheck, Brain, TrendingUp, ThumbsUp, MessageCircle, Copy, Check } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 
 const getApiKey = () => {
@@ -47,6 +47,8 @@ interface FilteredPost {
   problemSummary: string;
   intentType: string;
   opportunityScore: number;
+  relevanceScore: number;
+  relevanceReason: string;
 }
 
 interface DiscussionAnalysis {
@@ -62,6 +64,14 @@ interface ReplyVariations {
   friendlyCasual: string;
   insightHeavy: string;
   persuasive: string;
+}
+
+interface SERPAnalysis {
+  featuredSnippetOpportunity: string;
+  paaInsights: string[];
+  aeoStrategy: string;
+  contentGap: string;
+  recommendedSchema: string;
 }
 
 interface LearningAnalysis {
@@ -86,6 +96,14 @@ export default function App() {
   const [loadingFilter, setLoadingFilter] = useState(false);
   const [filterError, setFilterError] = useState('');
 
+  const [copiedId, setCopiedId] = useState<string | null>(null);
+
+  const handleCopy = (text: string, id: string) => {
+    navigator.clipboard.writeText(text);
+    setCopiedId(id);
+    setTimeout(() => setCopiedId(null), 2000);
+  };
+
   const [discussionInput, setDiscussionInput] = useState('');
   const [discussionAnalysis, setDiscussionAnalysis] = useState<DiscussionAnalysis | null>(null);
   const [loadingDiscussion, setLoadingDiscussion] = useState(false);
@@ -98,6 +116,11 @@ export default function App() {
   const [variations, setVariations] = useState<ReplyVariations | null>(null);
   const [loadingVariations, setLoadingVariations] = useState(false);
   const [variationsError, setVariationsError] = useState('');
+
+  const [serpInput, setSerpInput] = useState('');
+  const [serpAnalysis, setSerpAnalysis] = useState<SERPAnalysis | null>(null);
+  const [loadingSerp, setLoadingSerp] = useState(false);
+  const [serpError, setSerpError] = useState('');
 
   const [learningReply, setLearningReply] = useState('');
   const [learningEngagement, setLearningEngagement] = useState('');
@@ -119,23 +142,24 @@ export default function App() {
     setResult(null);
     setTargets(null);
     setTargetError('');
+    setSerpAnalysis(null);
+    setSerpError('');
+    setSerpInput('');
 
     try {
       const ai = new GoogleGenAI({ apiKey });
       const response = await ai.models.generateContent({
         model: 'gemini-3-flash-preview',
         contents: `You are an intent analyzer.
-
-User gives a topic. You expand it into real human search intent.
+        
+User gives a topic: "${topic}". You expand it into real human search intent.
 
 Rules:
-- Keep it simple and short
-- Use real words people say
-- Focus on problems, not definitions
-- No generic phrases
-
-Input:
-${topic}`,
+- STRICT RELEVANCE: All phrases MUST be directly related to "${topic}".
+- Focus on "long-tail" keywords that indicate a specific problem (e.g., "google update tanked my rankings" instead of just "google update").
+- Use specific industry terms to avoid confusion with other topics.
+- Focus on problems, frustrations, and specific questions.
+- No generic phrases.`,
         config: {
           responseMimeType: 'application/json',
           responseSchema: {
@@ -167,7 +191,9 @@ ${topic}`,
       });
 
       if (response.text) {
-        setResult(JSON.parse(response.text));
+        const parsedResult = JSON.parse(response.text);
+        console.log('Intent Analysis Result:', parsedResult);
+        setResult(parsedResult);
       } else {
         throw new Error('No response from AI');
       }
@@ -196,16 +222,20 @@ ${topic}`,
       const response = await ai.models.generateContent({
         model: 'gemini-3-flash-preview',
         contents: `You are a Reddit data collector.
+        
+Your job is to generate scraping targets for the topic: "${topic}".
 
-Your job is to generate scraping targets.
+Rules for redditSearchUrls:
+- Use advanced search operators to ensure relevance.
+- Format: https://www.reddit.com/search/?q=[query]&sort=new
+- Include "subreddit:seo" or "subreddit:marketing" or other relevant subreddits in the query if the topic is "${topic}".
+- Example for SEO: https://www.reddit.com/search/?q=subreddit%3Aseo+google+update&sort=new
+- Combine keywords with "problem", "help", "how to", "why" to find discussions.
 
-Rules:
-- Focus on recent posts only
-- Prioritize problem-based discussions
-- Avoid old or high-comment threads
-
-Input:
-${expanded_keywords}`,
+General Rules:
+- STRICT RELEVANCE: All search URLs and queries MUST be directly related to "${topic}".
+- Focus on recent posts only (sort=new).
+- Prioritize problem-based discussions.`,
         config: {
           responseMimeType: 'application/json',
           responseSchema: {
@@ -233,7 +263,9 @@ ${expanded_keywords}`,
       });
 
       if (response.text) {
-        setTargets(JSON.parse(response.text));
+        const parsedTargets = JSON.parse(response.text);
+        console.log('Generated Targets:', parsedTargets);
+        setTargets(parsedTargets);
       } else {
         throw new Error('No response from AI');
       }
@@ -289,7 +321,9 @@ ${discussionInput}`,
       });
 
       if (response.text) {
-        setDiscussionAnalysis(JSON.parse(response.text));
+        const parsedAnalysis = JSON.parse(response.text);
+        console.log('Discussion Analysis:', parsedAnalysis);
+        setDiscussionAnalysis(parsedAnalysis);
         setGeneratedReply(''); // Reset reply when new analysis is generated
       } else {
         throw new Error('No response from AI');
@@ -352,6 +386,7 @@ One natural Reddit reply (5–8 lines max)`,
       });
 
       if (response.text) {
+        console.log('Generated Reply:', response.text);
         setGeneratedReply(response.text);
       } else {
         throw new Error('No response from AI');
@@ -423,6 +458,62 @@ Output:
       setVariationsError(err.message || 'Failed to generate variations. Please try again.');
     } finally {
       setLoadingVariations(false);
+    }
+  };
+
+  const handleAnalyzeSERP = async () => {
+    if (!serpInput.trim()) return;
+    
+    setLoadingSerp(true);
+    setSerpError('');
+    setSerpAnalysis(null);
+
+    try {
+      const ai = new GoogleGenAI({ apiKey });
+      const response = await ai.models.generateContent({
+        model: 'gemini-3-flash-preview',
+        contents: `You are an AEO (Answer Engine Optimization) and SERP Analyst.
+        
+Analyze the following SERP data (snippets, People Also Ask, AI Overviews) for the topic: "${topic}".
+
+SERP Data:
+${serpInput}
+
+Goal: Identify how to win AEO citations (Featured Snippets, PAA, AI Overview mentions).
+
+Rules:
+- Identify the exact question being answered in the snippet.
+- Suggest a specific content structure (Table, List, Definition).
+- Identify what's missing in current top results.
+- Provide a clear AEO strategy.`,
+        config: {
+          responseMimeType: 'application/json',
+          responseSchema: {
+            type: Type.OBJECT,
+            properties: {
+              featuredSnippetOpportunity: { type: Type.STRING, description: "The specific question and format to target for a featured snippet." },
+              paaInsights: { type: Type.ARRAY, items: { type: Type.STRING }, description: "Key insights from People Also Ask questions." },
+              aeoStrategy: { type: Type.STRING, description: "Overall strategy to win AEO citations." },
+              contentGap: { type: Type.STRING, description: "What information is missing from current top results." },
+              recommendedSchema: { type: Type.STRING, description: "Recommended Schema.org markup (e.g., FAQ, HowTo)." }
+            },
+            required: ['featuredSnippetOpportunity', 'paaInsights', 'aeoStrategy', 'contentGap', 'recommendedSchema']
+          }
+        }
+      });
+
+      if (response.text) {
+        const parsedAnalysis = JSON.parse(response.text);
+        console.log('SERP Analysis:', parsedAnalysis);
+        setSerpAnalysis(parsedAnalysis);
+      } else {
+        throw new Error('No response from AI');
+      }
+    } catch (e: any) {
+      console.error('SERP Analysis Error:', e);
+      setSerpError(e.message || 'Failed to analyze SERP');
+    } finally {
+      setLoadingSerp(false);
     }
   };
 
@@ -501,20 +592,23 @@ Output:
         model: 'gemini-3-flash-preview',
         contents: `You are a content filter.
 
-Your job is to select high-opportunity Reddit posts.
+Your job is to select high-opportunity Reddit posts that are STRICTLY RELEVANT to the topic: "${topic}".
 
 Rules:
-- Keep posts with clear problems
-- Remove generic or discussion-only posts
-- Prefer low competition
+- RELEVANCE: Immediately discard any post that is not directly about "${topic}".
+- If the post is about gaming (like "Free Fire"), sports (like "Dodgers"), or other unrelated topics, DISCARD IT IMMEDIATELY.
+- Only keep posts where the user is asking a question or describing a problem related to "${topic}".
+- Remove generic, news, or meta-discussion posts.
+- Prefer posts where the user is seeking help or advice.
+- Prefer low competition (few comments).
 
-Input:
+Input Scraped Data:
 ${scrapedPostsInput}
 
 Filter conditions:
-- Comments less than 20
-- Posted within 24–48 hours
-- Contains problem intent`,
+- Topic: Must be about "${topic}"
+- Comments: Less than 20 preferred
+- Intent: Problem / Question / Comparison / Beginner Help`,
         config: {
           responseMimeType: 'application/json',
           responseSchema: {
@@ -528,15 +622,19 @@ Filter conditions:
                 problemSummary: { type: Type.STRING, description: 'Problem summary (1-2 lines)' },
                 intentType: { type: Type.STRING, description: 'problem / comparison / beginner / urgent' },
                 opportunityScore: { type: Type.NUMBER, description: 'Opportunity score (1-10)' },
+                relevanceScore: { type: Type.NUMBER, description: 'Relevance to the topic (1-10)' },
+                relevanceReason: { type: Type.STRING, description: 'Why this is relevant to the topic' },
               },
-              required: ['title', 'url', 'subreddit', 'problemSummary', 'intentType', 'opportunityScore'],
+              required: ['title', 'url', 'subreddit', 'problemSummary', 'intentType', 'opportunityScore', 'relevanceScore', 'relevanceReason'],
             },
           },
         },
       });
 
       if (response.text) {
-        setFilteredPosts(JSON.parse(response.text));
+        const parsedPosts = JSON.parse(response.text);
+        console.log('Filtered Posts:', parsedPosts);
+        setFilteredPosts(parsedPosts);
       } else {
         throw new Error('No response from AI');
       }
@@ -595,10 +693,10 @@ Filter conditions:
               <Search className="w-8 h-8 text-indigo-600" />
             </div>
             <h1 className="text-4xl font-bold tracking-tight text-zinc-900 sm:text-5xl mb-4">
-              Search Intent Analyzer
+              Reddit Search Intent Analyzer
             </h1>
             <p className="text-lg text-zinc-600 max-w-2xl mx-auto">
-              Discover what people are really searching for. Enter a topic to uncover real human problems, emotional intent, and community discussions.
+              Discover what people are really searching for. Enter a topic to uncover real human problems, emotional intent, and community discussions. Win AEO citation by analyzing the SERP.
             </p>
           </motion.div>
         </div>
@@ -736,6 +834,132 @@ Filter conditions:
                   ))}
                 </div>
               </div>
+
+              {/* Step 1.5: SERP & AEO Analysis */}
+              <motion.div
+                initial={{ opacity: 0, y: 20 }}
+                animate={{ opacity: 1, y: 0 }}
+                className="pt-12 border-t border-zinc-200"
+              >
+                <div className="text-center mb-8">
+                  <h2 className="text-2xl font-bold text-zinc-900">SERP & AEO Analysis</h2>
+                  <p className="text-zinc-600 mt-2">Analyze the Search Engine Results Page to win Answer Engine Optimization (AEO) citations.</p>
+                </div>
+
+                <div className="max-w-3xl mx-auto bg-white p-6 rounded-3xl shadow-sm border border-zinc-100">
+                  <textarea
+                    value={serpInput}
+                    onChange={(e) => setSerpInput(e.target.value)}
+                    placeholder="Paste SERP snippets, 'People Also Ask' questions, or AI Overview text here..."
+                    className="w-full h-48 p-4 bg-zinc-50 border border-zinc-200 rounded-2xl focus:outline-none focus:border-indigo-500 focus:ring-4 focus:ring-indigo-500/20 transition-all resize-none custom-scrollbar text-sm font-mono text-zinc-700 mb-4"
+                    disabled={loadingSerp}
+                  />
+                  <div className="flex justify-end">
+                    <button
+                      onClick={handleAnalyzeSERP}
+                      disabled={loadingSerp || !serpInput.trim()}
+                      className="px-6 py-3 bg-indigo-600 text-white font-medium rounded-xl hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed transition-colors flex items-center gap-2"
+                    >
+                      {loadingSerp ? (
+                        <Loader2 className="w-5 h-5 animate-spin" />
+                      ) : (
+                        <>
+                          <Brain className="w-4 h-4" />
+                          Analyze SERP for AEO
+                        </>
+                      )}
+                    </button>
+                  </div>
+
+                  {/* SERP Error State */}
+                  <AnimatePresence>
+                    {serpError && (
+                      <motion.div
+                        initial={{ opacity: 0, height: 0 }}
+                        animate={{ opacity: 1, height: 'auto' }}
+                        exit={{ opacity: 0, height: 0 }}
+                        className="mt-4 overflow-hidden"
+                      >
+                        <div className="p-4 bg-red-50 border border-red-200 rounded-2xl flex items-start gap-3 text-red-800">
+                          <AlertCircle className="w-5 h-5 shrink-0 mt-0.5" />
+                          <p>{serpError}</p>
+                        </div>
+                      </motion.div>
+                    )}
+                  </AnimatePresence>
+                </div>
+
+                {/* SERP Analysis Results */}
+                {serpAnalysis && (
+                  <motion.div
+                    initial={{ opacity: 0, y: 20 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    className="mt-12 max-w-3xl mx-auto space-y-6"
+                  >
+                    <div className="bg-white p-8 rounded-3xl shadow-sm border border-zinc-100">
+                      <div className="flex items-center gap-3 mb-6 pb-6 border-b border-zinc-100">
+                        <div className="p-2 bg-indigo-100 text-indigo-600 rounded-xl">
+                          <TrendingUp className="w-6 h-6" />
+                        </div>
+                        <div>
+                          <h3 className="text-xl font-bold text-zinc-900">AEO Strategy & Insights</h3>
+                          <p className="text-sm text-zinc-500">How to win the zero-click search era</p>
+                        </div>
+                      </div>
+
+                      <div className="space-y-6">
+                        <div>
+                          <h4 className="text-sm font-semibold text-zinc-500 uppercase tracking-wider mb-2 flex items-center gap-2">
+                            <Star className="w-4 h-4 text-amber-500" />
+                            Featured Snippet Opportunity
+                          </h4>
+                          <p className="text-lg font-medium text-zinc-900">{serpAnalysis.featuredSnippetOpportunity}</p>
+                        </div>
+
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                          <div className="bg-zinc-50 p-4 rounded-2xl border border-zinc-100">
+                            <h4 className="text-sm font-semibold text-zinc-500 uppercase tracking-wider mb-2 flex items-center gap-2">
+                              <MessageCircle className="w-4 h-4" />
+                              PAA Insights
+                            </h4>
+                            <ul className="space-y-2">
+                              {serpAnalysis.paaInsights.map((insight, i) => (
+                                <li key={i} className="text-sm text-zinc-700 flex items-start gap-2">
+                                  <span className="text-indigo-500">•</span>
+                                  {insight}
+                                </li>
+                              ))}
+                            </ul>
+                          </div>
+                          <div className="bg-zinc-50 p-4 rounded-2xl border border-zinc-100">
+                            <h4 className="text-sm font-semibold text-zinc-500 uppercase tracking-wider mb-2 flex items-center gap-2">
+                              <Lightbulb className="w-4 h-4" />
+                              Content Gap
+                            </h4>
+                            <p className="text-sm text-zinc-700">{serpAnalysis.contentGap}</p>
+                          </div>
+                        </div>
+
+                        <div className="bg-indigo-50 p-4 rounded-2xl border border-indigo-100">
+                          <h4 className="text-sm font-semibold text-indigo-700 uppercase tracking-wider mb-2 flex items-center gap-2">
+                            <Compass className="w-4 h-4" />
+                            AEO Execution Strategy
+                          </h4>
+                          <p className="text-indigo-900 font-medium">{serpAnalysis.aeoStrategy}</p>
+                        </div>
+
+                        <div className="pt-6 border-t border-zinc-100 flex items-center justify-between">
+                          <span className="text-sm font-semibold text-zinc-500 uppercase tracking-wider">Recommended Schema</span>
+                          <span className="inline-flex items-center gap-1.5 px-4 py-2 bg-emerald-50 text-emerald-700 rounded-xl font-bold">
+                            <ShieldCheck className="w-4 h-4" />
+                            {serpAnalysis.recommendedSchema}
+                          </span>
+                        </div>
+                      </div>
+                    </div>
+                  </motion.div>
+                )}
+              </motion.div>
 
               {/* Generate Targets Button */}
               {!targets && !loadingTargets && (
@@ -931,14 +1155,22 @@ Filter conditions:
                                   <span className="inline-flex items-center gap-1 px-2.5 py-1 bg-indigo-50 text-indigo-700 rounded-lg font-medium capitalize">
                                     {post.intentType}
                                   </span>
+                                  <span className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-lg font-medium ${post.relevanceScore >= 8 ? 'bg-emerald-50 text-emerald-700' : 'bg-amber-50 text-amber-700'}`}>
+                                    Relevance: {post.relevanceScore}/10
+                                  </span>
                                 </div>
                               </div>
-                              <div className="flex items-center gap-1.5 px-3 py-1.5 bg-emerald-50 text-emerald-700 rounded-xl font-bold shrink-0">
-                                <Star className="w-4 h-4 fill-emerald-500 text-emerald-500" />
-                                {post.opportunityScore}/10
+                              <div className="flex flex-col items-end gap-2 shrink-0">
+                                <div className="flex items-center gap-1.5 px-3 py-1.5 bg-emerald-50 text-emerald-700 rounded-xl font-bold">
+                                  <Star className="w-4 h-4 fill-emerald-500 text-emerald-500" />
+                                  {post.opportunityScore}/10
+                                </div>
                               </div>
                             </div>
-                            <p className="text-zinc-600 mb-4">{post.problemSummary}</p>
+                            <p className="text-zinc-600 mb-3">{post.problemSummary}</p>
+                            <div className="mb-4 p-3 bg-zinc-50 rounded-xl border border-zinc-100 text-sm text-zinc-500 italic">
+                              <span className="font-semibold text-zinc-700 not-italic">Why relevant:</span> {post.relevanceReason}
+                            </div>
                             <a
                               href={post.url}
                               target="_blank"
@@ -1128,8 +1360,21 @@ Filter conditions:
                                 <p className="text-sm text-zinc-500">Ready to copy and paste</p>
                               </div>
                             </div>
-                            <div className="bg-zinc-50 p-6 rounded-2xl border border-zinc-200 text-zinc-800 whitespace-pre-wrap font-sans leading-relaxed text-lg">
-                              {generatedReply}
+                            <div className="relative group">
+                              <div className="bg-zinc-50 p-6 rounded-2xl border border-zinc-200 text-zinc-800 whitespace-pre-wrap font-sans leading-relaxed text-lg pr-16">
+                                {generatedReply}
+                              </div>
+                              <button
+                                onClick={() => handleCopy(generatedReply, 'main-reply')}
+                                className="absolute top-4 right-4 p-2 bg-white border border-zinc-200 rounded-xl text-zinc-500 hover:text-indigo-600 hover:border-indigo-200 transition-all shadow-sm opacity-0 group-hover:opacity-100 focus:opacity-100"
+                                title="Copy to clipboard"
+                              >
+                                {copiedId === 'main-reply' ? (
+                                  <Check className="w-5 h-5 text-emerald-500" />
+                                ) : (
+                                  <Copy className="w-5 h-5" />
+                                )}
+                              </button>
                             </div>
 
                             {/* Variations Trigger */}
@@ -1179,34 +1424,86 @@ Filter conditions:
                                 animate={{ opacity: 1, y: 0 }}
                                 className="mt-8 grid grid-cols-1 md:grid-cols-2 gap-6"
                               >
-                                <div className="bg-zinc-50 p-5 rounded-2xl border border-zinc-200">
-                                  <div className="flex items-center gap-2 mb-3 text-zinc-500">
-                                    <Zap className="w-4 h-4" />
-                                    <span className="text-xs font-bold uppercase tracking-wider">Short & Direct</span>
+                                <div className="bg-zinc-50 p-5 rounded-2xl border border-zinc-200 relative group">
+                                  <div className="flex items-center justify-between mb-3">
+                                    <div className="flex items-center gap-2 text-zinc-500">
+                                      <Zap className="w-4 h-4" />
+                                      <span className="text-xs font-bold uppercase tracking-wider">Short & Direct</span>
+                                    </div>
+                                    <button
+                                      onClick={() => handleCopy(variations.shortDirect, 'var-short')}
+                                      className="p-1.5 bg-white border border-zinc-200 rounded-lg text-zinc-400 hover:text-indigo-600 transition-all opacity-0 group-hover:opacity-100 focus:opacity-100"
+                                      title="Copy variation"
+                                    >
+                                      {copiedId === 'var-short' ? (
+                                        <Check className="w-3.5 h-3.5 text-emerald-500" />
+                                      ) : (
+                                        <Copy className="w-3.5 h-3.5" />
+                                      )}
+                                    </button>
                                   </div>
                                   <p className="text-zinc-800 text-sm leading-relaxed">{variations.shortDirect}</p>
                                 </div>
 
-                                <div className="bg-zinc-50 p-5 rounded-2xl border border-zinc-200">
-                                  <div className="flex items-center gap-2 mb-3 text-zinc-500">
-                                    <Smile className="w-4 h-4" />
-                                    <span className="text-xs font-bold uppercase tracking-wider">Friendly & Casual</span>
+                                <div className="bg-zinc-50 p-5 rounded-2xl border border-zinc-200 relative group">
+                                  <div className="flex items-center justify-between mb-3">
+                                    <div className="flex items-center gap-2 text-zinc-500">
+                                      <Smile className="w-4 h-4" />
+                                      <span className="text-xs font-bold uppercase tracking-wider">Friendly & Casual</span>
+                                    </div>
+                                    <button
+                                      onClick={() => handleCopy(variations.friendlyCasual, 'var-friendly')}
+                                      className="p-1.5 bg-white border border-zinc-200 rounded-lg text-zinc-400 hover:text-indigo-600 transition-all opacity-0 group-hover:opacity-100 focus:opacity-100"
+                                      title="Copy variation"
+                                    >
+                                      {copiedId === 'var-friendly' ? (
+                                        <Check className="w-3.5 h-3.5 text-emerald-500" />
+                                      ) : (
+                                        <Copy className="w-3.5 h-3.5" />
+                                      )}
+                                    </button>
                                   </div>
                                   <p className="text-zinc-800 text-sm leading-relaxed">{variations.friendlyCasual}</p>
                                 </div>
 
-                                <div className="bg-zinc-50 p-5 rounded-2xl border border-zinc-200">
-                                  <div className="flex items-center gap-2 mb-3 text-zinc-500">
-                                    <BookOpen className="w-4 h-4" />
-                                    <span className="text-xs font-bold uppercase tracking-wider">Insight-Heavy</span>
+                                <div className="bg-zinc-50 p-5 rounded-2xl border border-zinc-200 relative group">
+                                  <div className="flex items-center justify-between mb-3">
+                                    <div className="flex items-center gap-2 text-zinc-500">
+                                      <BookOpen className="w-4 h-4" />
+                                      <span className="text-xs font-bold uppercase tracking-wider">Insight-Heavy</span>
+                                    </div>
+                                    <button
+                                      onClick={() => handleCopy(variations.insightHeavy, 'var-insight')}
+                                      className="p-1.5 bg-white border border-zinc-200 rounded-lg text-zinc-400 hover:text-indigo-600 transition-all opacity-0 group-hover:opacity-100 focus:opacity-100"
+                                      title="Copy variation"
+                                    >
+                                      {copiedId === 'var-insight' ? (
+                                        <Check className="w-3.5 h-3.5 text-emerald-500" />
+                                      ) : (
+                                        <Copy className="w-3.5 h-3.5" />
+                                      )}
+                                    </button>
                                   </div>
                                   <p className="text-zinc-800 text-sm leading-relaxed">{variations.insightHeavy}</p>
                                 </div>
 
-                                <div className="bg-zinc-50 p-5 rounded-2xl border border-zinc-200">
-                                  <div className="flex items-center gap-2 mb-3 text-zinc-500">
-                                    <ShieldCheck className="w-4 h-4" />
-                                    <span className="text-xs font-bold uppercase tracking-wider">Persuasive</span>
+                                <div className="bg-zinc-50 p-5 rounded-2xl border border-zinc-200 relative group">
+                                  <div className="flex items-center justify-between mb-3">
+                                    <div className="flex items-center gap-2 text-zinc-500">
+                                      <ShieldCheck className="w-4 h-4" />
+                                      <span className="text-xs font-bold uppercase tracking-wider">Persuasive</span>
+                                    </div>
+                                    <button
+                                      onClick={() => handleCopy(variations.persuasive, 'var-persuasive')}
+                                      className="p-1.5 bg-white border border-zinc-200 rounded-lg text-zinc-400 hover:text-indigo-600 transition-all opacity-0 group-hover:opacity-100 focus:opacity-100"
+                                      title="Copy variation"
+                                    >
+                                      {copiedId === 'var-persuasive' ? (
+                                        <Check className="w-3.5 h-3.5 text-emerald-500" />
+                                      ) : (
+                                        <Copy className="w-3.5 h-3.5" />
+                                      )}
+                                    </button>
                                   </div>
                                   <p className="text-zinc-800 text-sm leading-relaxed">{variations.persuasive}</p>
                                 </div>
