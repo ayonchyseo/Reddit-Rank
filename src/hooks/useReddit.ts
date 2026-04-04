@@ -12,7 +12,8 @@ export async function fetchReddit(
     if (res.status === 429) {
       throw new Error("Reddit rate limit hit. Please wait 30 seconds.");
     }
-    throw new Error("Reddit API error");
+    const errorData = await res.json().catch(() => ({}));
+    throw new Error(`Reddit API error (${res.status}): ${errorData.error || res.statusText}`);
   }
   return res.json();
 }
