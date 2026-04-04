@@ -23,7 +23,6 @@ export function CommentGenerator() {
   const handleGenerate = async () => {
     if (!postUrl.trim()) return;
 
-    // Extract subreddit and post ID from URL
     const match = postUrl.match(/r\/([^/]+)\/comments\/([^/]+)/);
     if (!match) {
       alert("Please enter a valid Reddit post URL (e.g., https://www.reddit.com/r/SEO/comments/...)");
@@ -37,7 +36,6 @@ export function CommentGenerator() {
     setResult(null);
 
     try {
-      // Fetch post data and rules in parallel
       const [postData, rulesData] = await Promise.all([
         execute(fetchReddit(`r/${subreddit}/comments/${postId}`)),
         execute(fetchReddit(`r/${subreddit}/about/rules`))
@@ -49,29 +47,45 @@ export function CommentGenerator() {
 
       const post = postData[0].data.children[0].data;
       const rules = rulesData?.rules || [];
-      
-      const rulesText = rules.map((r: any, i: number) => `${i + 1}. ${r.short_name}: ${r.description}`).join("\n");
+
+      const rulesText = rules
+        .map((r: any, i: number) => `${i + 1}. ${r.short_name}: ${r.description}`)
+        .join("\n");
 
       const prompt = `
-You are an expert Reddit marketer and community manager.
-Your goal is to write a highly valuable, authentic, and natural-sounding comment for a specific Reddit post.
-You MUST subtly incorporate the user's core message/product WITHOUT violating the subreddit's rules. Redditors hate spam, so you must provide 90% value and 10% promotion (if any).
+You are a regular Reddit user who genuinely enjoys helping people online.
+You have NO agenda, NO product to sell. You just want to write a real, helpful comment.
 
-SUBREDDIT RULES for r/${subreddit}:
-${rulesText || "No specific rules found, but follow general Reddit etiquette (no spam, be helpful)."}
+CRITICAL RULES:
+- Write like a real human: casual tone, occasional imperfection, no corporate language
+- NO bullet points unless the post itself is technical/list-based
+- NO self-promotion unless the user's core message is provided AND it fits 100% naturally
+- Keep it SHORT to MEDIUM length — 2 to 5 sentences usually. Long comments scream bot.
+- Never start with "Great post!", "This is such a good question", or any compliment opener
+- Never use phrases like "I hope this helps!", "Feel free to ask!", "As someone who..."
+- React to ONE specific detail from the post title or body — show you actually read it
+- Match the subreddit's vibe: casual subreddits get casual replies, technical ones get technical replies
+- If no core message is provided, DO NOT promote anything at all
 
-ORIGINAL POST:
-Title: ${post.title}
-Body: ${post.selftext || "No body text (link or image post)."}
+SUBREDDIT CONTEXT: r/${subreddit}
+SUBREDDIT RULES:
+${rulesText || "Follow general Reddit etiquette. No spam, be helpful and genuine."}
 
-USER'S CORE MESSAGE / PRODUCT TO MENTION (Optional but try to include naturally if provided):
-${coreMessage || "Just provide a highly valuable and insightful answer to the post."}
+POST TITLE: ${post.title}
+POST BODY: ${post.selftext || "(No body — image or link post)"}
+
+${
+  coreMessage
+    ? `USER WANTS TO NATURALLY MENTION: ${coreMessage}
+Only include this if it genuinely fits the conversation. If it feels forced, skip it entirely.`
+    : "No promotion needed. Just be helpful."
+}
 
 Generate a JSON response with these exact keys:
 {
-  "comment": "The exact text of the comment to post. Use markdown for formatting. Make it sound like a real human Redditor wrote it.",
-  "safetyAnalysis": "Explain why this comment is safe to post and how it avoids being flagged as spam.",
-  "ruleViolationsAvoided": ["Rule 1: No self-promotion (avoided by providing actionable advice first)", "Rule 3: Be respectful (maintained a helpful tone)"]
+  "comment": "The comment text. Sound like a real person. No markdown headers. Keep it concise.",
+  "safetyAnalysis": "One sentence: why this won't get flagged.",
+  "ruleViolationsAvoided": ["Short rule name: how avoided"]
 }
 Return ONLY valid JSON. No markdown blocks outside the JSON.
 `;
@@ -119,7 +133,9 @@ Return ONLY valid JSON. No markdown blocks outside the JSON.
         </div>
 
         <div>
-          <label className="block text-sm font-medium text-gray-400 mb-2">Core Message / Product (Optional)</label>
+          <label className="block text-sm font-medium text-gray-400 mb-2">
+            Core Message / Product (Optional)
+          </label>
           <textarea
             value={coreMessage}
             onChange={(e) => setCoreMessage(e.target.value)}
@@ -172,8 +188,10 @@ Return ONLY valid JSON. No markdown blocks outside the JSON.
             </div>
             <div className="p-6 bg-gray-950">
               <div className="prose prose-invert max-w-none">
-                {result.comment.split('\n').map((paragraph, idx) => (
-                  <p key={idx} className="text-gray-300 whitespace-pre-wrap">{paragraph}</p>
+                {result.comment.split("\n").map((paragraph, idx) => (
+                  <p key={idx} className="text-gray-300 whitespace-pre-wrap">
+                    {paragraph}
+                  </p>
                 ))}
               </div>
             </div>
